@@ -25,10 +25,12 @@
 #include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <sys/types.h>
+#include <time.h>
 #include <sys/wait.h>
 #include <X11/cursorfont.h>
 #include <X11/keysym.h>
@@ -207,6 +209,7 @@ static void showhide(Client *c);
 static void spawn(const Arg *arg);
 static void tag(const Arg *arg);
 static void tagmon(const Arg *arg);
+static void tagmonTag(const Arg *arg);
 static void tile(Monitor *m);
 static void togglebar(const Arg *arg);
 static void togglefloating(const Arg *arg);
@@ -236,6 +239,7 @@ static void zoom(const Arg *arg);
 /* variables */
 static const char broken[] = "broken";
 static char stext[256];
+static char timeAsc[64];
 static int screen;
 static int sw, sh;           /* X display screen geometry width, height */
 static int bh;               /* bar height */
@@ -267,6 +271,14 @@ static Drw *drw;
 static Monitor *mons, *selmon;
 static Window root, wmcheckwin;
 
+char bat_file_name[] = "/sys/class/power_supply/BAT0/capacity";
+FILE *bat_file_handle;
+char bat_percentage[10];
+char fullBatStatus[20];
+char critical_bat[5]="5";
+char chargingStatus[20];
+
+
 /* configuration, allows nested code to access above variables */
 #include "config.h"
 
@@ -274,6 +286,11 @@ static Window root, wmcheckwin;
 struct NumTags { char limitexceeded[LENGTH(tags) > 31 ? -1 : 1]; };
 
 /* function implementations */
+int
+checkForMonitors(){
+
+}
+
 void
 applyrules(Client *c)
 {
@@ -695,22 +712,108 @@ dirtomon(int dir)
 }
 
 void
+getbatterystatus(char *str, size_t size, int capacity)
+{
+    FILE *fp;
+    char status[12];
+    const char icon[10];
+
+    /* Read battery status */
+    fp = fopen("/sys/class/power_supply/BAT0/status", "r");
+    if (fp == NULL) {
+        snprintf(str, size, "No Battery");
+        return;
+    }
+    fscanf(fp, "%s", status);
+    fclose(fp);
+
+        /* Set icon based on status and capacity */
+    if (strcmp(status, "Charging") == 0) {
+       // icon = "󰂄";  /* Nerd Font charging icon */
+        //icon = "🔌";
+       // "🔋"  /* Battery */
+           // "🔌"  /* Plug */
+           strcpy(icon, "⚡");  /* Lightning */
+           // "▮"  /* Bar */
+            /* Or use: icon = "⚡"; for simple Unicode */
+    } else if (strcmp(status, "Discharging") == 0) {
+        /* Different icons based on capacity */
+        if (capacity >= 90)
+            strcpy(icon, "󰁹");  /* Full battery */
+        else if (capacity >= 70)
+            strcpy(icon, "󰂀");  /* 75% battery */
+        else if (capacity >= 50)
+            strcpy(icon, "󰁾");  /* 50% battery */
+        else if (capacity >= 30)
+            strcpy(icon, "󰁼");  /* 25% battery */
+        else if (capacity >= 10)
+            strcpy(icon, "󰁺");  /* Low battery */
+        else
+            strcpy(icon, "󰂎");  /* Critical battery */
+
+        /* Or simple Unicode: icon = "🔋"; */
+    } else {
+        strcpy(icon, "󰚥");  /* Full/plugged icon */
+        /* Or use: icon = "✓"; */
+    }
+
+    snprintf(str, size, " %s ", icon);
+}
+
+void
 drawbar(Monitor *m)
 {
-	int x, w, tw = 0;
+	int x, w, tw = 0, bw = 0, ww = 0, fw=0;
 	int boxs = drw->fonts->h / 9;
 	int boxw = drw->fonts->h / 6 + 2;
+    static bool notifiedStatus=0;
 	unsigned int i, occ = 0, urg = 0;
+    static const char *notifyCmd[] = {"notify", NULL};
+    time_t currentTime;
+    struct tm *localTime;
 	Client *c;
+    memset(bat_percentage, 0, 10);
+	bat_file_handle = fopen(bat_file_name, "r");
+    if (fgets(bat_percentage, sizeof(bat_percentage), bat_file_handle))
+    {
+        bat_percentage[strcspn(bat_percentage, "\n")] = '\0';
+    }
+    else
+    {
+        strcpy(bat_percentage, "N/A");
+    }
+    bat_percentage[strcspn(bat_percentage, "\n")] = '\0';
+    int batP = atoi(bat_percentage);
+    if(batP  <= 10 && !notifiedStatus)
+    {
+        Arg localArg = {.v = notifyCmd};
+        spawn(&localArg);
+        notifiedStatus=1;
+    }
+    if(batP  >= 60){
+        notifiedStatus = 0;
+    }
+    fclose(bat_file_handle);
+    getbatterystatus(fullBatStatus, 20, batP);
+    if (!m->showbar)
+        return;
 
-	if (!m->showbar)
-		return;
+    time(&currentTime);
+    localTime = localtime(&currentTime);
+
+    strftime(timeAsc, sizeof(timeAsc), "%d/%m/%Y %H:%M:%S", localTime);
 
 	/* draw status first so it can be overdrawn by tags later */
 	if (m == selmon) { /* status is only drawn on selected monitor */
 		drw_setscheme(drw, scheme[SchemeNorm]);
 		tw = TEXTW(stext) - lrpad + 2; /* 2px right padding */
+		bw = TEXTW(bat_percentage) - lrpad + 2;
+        ww = TEXTW(timeAsc) - lrpad + 2;
+        fw = TEXTW(fullBatStatus) - lrpad + 2;
 		drw_text(drw, m->ww - tw, 0, tw, bh, 0, stext, 0);
+		drw_text(drw, m->ww - tw - bw, 0, bw, bh, 0, bat_percentage, 0);
+        drw_text(drw, m->ww - tw - bw - ww, 0, ww, bh, 0, timeAsc, 0);
+        drw_text(drw, m->ww - tw - bw - ww - fw, 0, fw, bh, 0, fullBatStatus, 0);
 	}
 
 	for (c = m->clients; c; c = c->next) {
@@ -733,7 +836,7 @@ drawbar(Monitor *m)
 	drw_setscheme(drw, scheme[SchemeNorm]);
 	x = drw_text(drw, x, 0, w, bh, lrpad / 2, m->ltsymbol, 0);
 
-	if ((w = m->ww - tw - x) > bh) {
+	if ((w = m->ww - tw - x - bw - ww - fw) > bh) {
 		if (m->sel) {
 			drw_setscheme(drw, scheme[m == selmon ? SchemeSel : SchemeNorm]);
 			drw_text(drw, x, 0, w, bh, lrpad / 2, m->sel->name, 0);
@@ -1433,6 +1536,21 @@ sendmon(Client *c, Monitor *m)
 }
 
 void
+sendmonParticular(Client *c, Monitor *m, int tagNo){
+    if(c->mon == m)
+        return;
+    unfocus(c, 1);
+    detach(c);
+    detachstack(c);
+    c->mon = m;
+    c->tags = tagNo;
+    attach(c);
+    attachstack(c);
+    focus(NULL);
+    arrange(NULL);
+}
+
+void
 setclientstate(Client *c, long state)
 {
 	long data[] = { state, None };
@@ -1681,6 +1799,13 @@ tagmon(const Arg *arg)
 	if (!selmon->sel || !mons->next)
 		return;
 	sendmon(selmon->sel, dirtomon(arg->i));
+}
+
+void
+tagmonTag(const Arg *arg){
+    if(!selmon->sel || !mons->next )
+        return;
+    sendmonParticular(selmon->sel, dirtomon(1), arg->i);
 }
 
 void
