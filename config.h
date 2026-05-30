@@ -116,8 +116,8 @@ static const Key keys[] = {
     {0, XK_F3,               spawn,          {.v = volup}},
     {0, XK_F2,               spawn,          {.v = voldown}},
     {0, XK_F1,                      spawn,          {.v = volmute}},
-    {0, XK_F6,                      spawn,          {.v = brightdown}},
-    {0, XK_F7,                      spawn,          {.v = brightup}},
+    {0, XK_F5,                      spawn,          {.v = brightdown}},
+    {0, XK_F6,                      spawn,          {.v = brightup}},
     {MODKEY,                        XK_v,       spawn,         {.v = showClip}}
 
 };
