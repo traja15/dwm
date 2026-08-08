@@ -1486,10 +1486,31 @@ run(void)
 {
 	XEvent ev;
 	/* main event loop */
+    struct timeval tv;
+    fd_set fds;
+    int xfd = ConnectionNumber(dpy);
+
 	XSync(dpy, False);
-	while (running && !XNextEvent(dpy, &ev)){
-		if (handler[ev.type]){
-			handler[ev.type](&ev); /* call handler */
+	//while (running && !XNextEvent(dpy, &ev)){
+	//	if (handler[ev.type]){
+	//		handler[ev.type](&ev); /* call handler */
+    //    }
+    //}
+    //
+    while(running){
+        FD_ZERO(&fds);
+        FD_SET(xfd, &fds);
+        tv.tv_sec = 1;
+        tv.tv_usec = 0;
+        if(select(xfd + 1, &fds, NULL, NULL, &tv) == 0){
+            drawbar(selmon);
+            continue;
+        }
+        while(XPending(dpy)){
+            XNextEvent(dpy, &ev);
+            if(handler[ev.type]){
+                handler[ev.type](&ev);
+            }
         }
     }
 }
