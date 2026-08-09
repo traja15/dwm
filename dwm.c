@@ -774,7 +774,7 @@ drawbar(Monitor *m)
 	Client *c;
     memset(bat_percentage, 0, 10);
 	bat_file_handle = fopen(bat_file_name, "r");
-    if (fgets(bat_percentage, sizeof(bat_percentage), bat_file_handle))
+    if (bat_file_handle && fgets(bat_percentage, sizeof(bat_percentage), bat_file_handle))
     {
         bat_percentage[strcspn(bat_percentage, "\n")] = '\0';
     }
