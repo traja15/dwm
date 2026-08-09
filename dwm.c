@@ -725,7 +725,9 @@ getbatterystatus(char *str, size_t size, int capacity)
         return;
     }
     fscanf(fp, "%s", status);
-    fclose(fp);
+    if(fp){
+        fclose(fp);
+    }
 
         /* Set icon based on status and capacity */
     if (strcmp(status, "Charging") == 0) {
@@ -793,7 +795,9 @@ drawbar(Monitor *m)
     if(batP  >= 60){
         notifiedStatus = 0;
     }
-    fclose(bat_file_handle);
+    if(bat_file_handle){
+        fclose(bat_file_handle);
+    }
     getbatterystatus(fullBatStatus, 20, batP);
     if (!m->showbar)
         return;
